@@ -79,7 +79,7 @@ export class BaseRace extends Scene {
             ai.body.setMaxVelocity(ai.baseMaxVelocity);
             ai.body.setBounce(0.1);
 
-            ai.aiSpeed = 300 + Math.random() * 80;
+            ai.aiSpeed = 250 + Math.random() * 80;
             ai.isStunned = false;
             ai.hasFinished = false;
             ai.isDefeated = false;
@@ -729,7 +729,6 @@ killCar(car) {
     }
 
     updateAIRacer(ai) {
-        const delta = ai.flipDir * ai.flipSpeed * this.frameScale;
         this.drawAIHealthBar(ai);
 
         if (ai.isDefeated) {
@@ -1070,9 +1069,7 @@ killCar(car) {
     // MAIN UPDATE LOOP
     // ====================================================================
 
-    update(time, dt) {
-        const frameMs = (typeof dt === 'number' && dt > 0) ? Math.min(dt, 50) : 1000 / 60;
-        this.frameScale = frameMs / (1000 / 60);
+    update() {
 
         if (!this.raceStarted) {
             this.player.body.setVelocity(0, 0);
@@ -1171,8 +1168,8 @@ killCar(car) {
             }
 
             let delta = 0;
-            if (this.wasd.A.isDown) delta = -0.08 * this.frameScale;
-            else if (this.wasd.D.isDown) delta = 0.08 * this.frameScale;
+            if (this.wasd.A.isDown) delta = -0.08;
+            else if (this.wasd.D.isDown) delta = 0.08;
 
             player.rotation += delta;
             player.totalFlipRotation += delta;
