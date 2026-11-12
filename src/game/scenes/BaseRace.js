@@ -1263,7 +1263,7 @@ export class BaseRace extends Scene {
                 player.attemptedFlip = false;
             }
 
-            const rotationSpeed = 0.12;
+            const rotationSpeed = 0.18;
             const rotationAmount = rotationSpeed * (frameDelta / 26.67);
 
             let rotation = 0;
