@@ -1168,7 +1168,7 @@ killCar(car) {
             }
 
             const rotationSpeed = 0.12;
-            const rotationAmount = rotationSpeed * (frameDelta / 16.67);
+            const rotationAmount = rotationSpeed * (frameDelta / 26.67);
 
             let rotation = 0;
 
