@@ -1,3 +1,4 @@
+
 import { Scene } from 'phaser';
 import { addCurrency, loadProgress } from '../utils/progress';
 
@@ -6,8 +7,6 @@ const RESPAWN_INVULN = 2000;
 const ROCKET_DAMAGE = 60;
 
 export class BaseRace extends Scene {
-
-    
 
     // ====================================================================
     // SCENE LIFECYCLE
@@ -40,13 +39,14 @@ export class BaseRace extends Scene {
         this.player.maxHealth = 25;
         this.raceFinished = false;
 
-        // Snap to actual ground height now that scale (and displayHeight) is known
+        // Snap to actual ground height
         this.player.y = 730 - this.player.displayHeight / 2;
 
         // Flip/boost state
         this.player.flipBoostUntil = 0;
         this.player.wasAirborne = false;
         this.player.totalFlipRotation = 0;
+        this.player.attemptedFlip = false;
     }
 
     setupGround(trackWidth) {
@@ -68,7 +68,6 @@ export class BaseRace extends Scene {
             ai.setScale(0.15);
             ai.aiName = aiNames[i % aiNames.length];
 
-            // Snap to actual ground height now that scale (and displayHeight) is known
             ai.y = 730 - ai.displayHeight / 2;
 
             ai.body.setCollideWorldBounds(true);
@@ -101,7 +100,6 @@ export class BaseRace extends Scene {
             if (this.ground) {
                 this.physics.add.collider(ai, this.ground);
             }
-            //this.physics.add.collider(ai, this.player);//
 
             this.aiRacers.push(ai);
         }
@@ -122,8 +120,6 @@ export class BaseRace extends Scene {
         this.justResumed = false;
         this.setupWeapons();
     }
-
-    
 
     // ====================================================================
     // COUNTDOWN
@@ -156,7 +152,7 @@ export class BaseRace extends Scene {
                 }
 
                 this.raceStarted = true;
-                this.weaponsEnabledAt = this.time.now + 2500; // controls when weapon enabled
+                this.weaponsEnabledAt = this.time.now + 2500;
                 return;
             }
 
@@ -278,7 +274,6 @@ export class BaseRace extends Scene {
         if (ai.isStunned || ai.hasFinished || this.raceFinished) return;
         if (time < ai.lastFiredTime + ai.fireCooldown) return;
 
-        // Find the closest valid target: the player or another AI racer
         let target = null;
         let bestDist = Infinity;
 
@@ -387,65 +382,81 @@ export class BaseRace extends Scene {
         if (!ai.isDead) this.flashHit(ai);
     }
 
-    // Quick red flash so a hit is visible without stopping the car
     flashHit(car) {
         car.setTint(0xff8888);
         this.time.delayedCall(100, () => {
             if (!car.isDead) car.clearTint();
         });
     }
+
     isInvulnerable(car) {
-    return this.time.now < (car.invulnerableUntil || 0);
-}
+        return this.time.now < (car.invulnerableUntil || 0);
+    }
 
-// Returns true if this hit destroyed the car
-damageCar(car, damage) {
-    if (car.isDead || car.isDefeated || car.hasFinished) return false;
-    if (this.isInvulnerable(car)) return false;
+    damageCar(car, damage) {
+        if (car.isDead || car.isDefeated || car.hasFinished) return false;
+        if (this.isInvulnerable(car)) return false;
 
-    car.health = Math.max(0, car.health - damage);
-    const isPlayer = car === this.player;
-    this.showDamageNumber(car.x, car.y - (isPlayer ? 30 : 20), damage, isPlayer ? '#ffaa00' : '#ff4444');
-    if (isPlayer) this.updatePlayerHealthBar();
+        car.health = Math.max(0, car.health - damage);
+        const isPlayer = car === this.player;
 
-    if (car.health > 0) return false;
-    this.killCar(car);
-    return true;
-}
+        this.showDamageNumber(
+            car.x,
+            car.y - (isPlayer ? 30 : 20),
+            damage,
+            isPlayer ? '#ffaa00' : '#ff4444'
+        );
 
-killCar(car) {
-    car.isDead = true;
-    car.isStunned = true;
-    car.body.setVelocity(0, 0);
-    car.body.setAcceleration(0, 0);
-    car.body.checkCollision.none = true;
-    car.setTint(0xff0000);
-    this.showPickupText(car.x, car.y - 30, car === this.player ? 'WRECKED!' : 'DESTROYED!', '#ff2200');
+        if (isPlayer) this.updatePlayerHealthBar();
 
-    this.tweens.add({ targets: car, alpha: 0.25, duration: RESPAWN_DELAY });
-    this.time.delayedCall(RESPAWN_DELAY, () => this.respawnCar(car));
-}
+        if (car.health > 0) return false;
+
+        this.killCar(car);
+        return true;
+    }
+
+    killCar(car) {
+        car.isDead = true;
+        car.isStunned = true;
+        car.body.setVelocity(0, 0);
+        car.body.setAcceleration(0, 0);
+        car.body.checkCollision.none = true;
+        car.setTint(0xff0000);
+
+        this.showPickupText(
+            car.x,
+            car.y - 30,
+            car === this.player ? 'WRECKED!' : 'DESTROYED!',
+            '#ff2200'
+        );
+
+        this.tweens.add({ targets: car, alpha: 0.25, duration: RESPAWN_DELAY });
+        this.time.delayedCall(RESPAWN_DELAY, () => this.respawnCar(car));
+    }
 
     respawnCar(car) {
         if (car.hasFinished) return;
 
         this.tweens.killTweensOf(car);
+
         const groundY = this.groundHeightFn ? this.groundHeightFn(car.x) : 730;
         car.body.reset(car.x, groundY - car.displayHeight / 2);
 
         car.rotation = 0;
         car.wasAirborne = false;
         car.totalFlipRotation = 0;
+        car.attemptedFlip = false;
         car.health = car.maxHealth;
         car.isDead = false;
         car.isStunned = false;
         car.body.checkCollision.none = false;
         car.clearTint();
+
         if (car === this.player) this.updatePlayerHealthBar();
 
-        // Short protection, shown by blinking
         car.invulnerableUntil = this.time.now + RESPAWN_INVULN;
         car.setAlpha(1);
+
         this.tweens.add({
             targets: car,
             alpha: 0.35,
@@ -460,17 +471,23 @@ killCar(car) {
         if (!this.rocketCharges || this.rocketCharges <= 0) return;
         if (!this.aiRacers) return;
 
-        const targets = this.aiRacers.filter(ai => !ai.hasFinished && !ai.isDefeated && !ai.isDead);
-        if (targets.length === 0) return;
-        
+        const targets = this.aiRacers.filter(ai =>
+            !ai.hasFinished && !ai.isDefeated && !ai.isDead
+        );
 
-        targets.sort((a, b) => Math.abs(a.x - this.player.x) - Math.abs(b.x - this.player.x));
+        if (targets.length === 0) return;
+
+        targets.sort((a, b) =>
+            Math.abs(a.x - this.player.x) - Math.abs(b.x - this.player.x)
+        );
+
         const target = targets[0];
 
         this.rocketCharges -= 1;
         this.updateWeaponHUD();
 
         const rocket = this.add.rectangle(this.player.x, this.player.y, 20, 8, 0xff2200);
+
         this.tweens.add({
             targets: rocket,
             x: target.x,
@@ -495,53 +512,73 @@ killCar(car) {
         ai.setTint(0xff0000);
 
         this.showPickupText(ai.x, ai.y - 20, 'DEFEATED!', '#ff2200');
-        this.finishOrder.push({ name: `${ai.aiName} (defeated)`, isPlayer: false, isDefeatedEntry: true });
+        this.finishOrder.push({
+            name: `${ai.aiName} (defeated)`,
+            isPlayer: false,
+            isDefeatedEntry: true
+        });
+
         this.checkAllFinished();
     }
 
     // ====================================================================
-    // FLIPS & LANDING (stick-the-landing boost / crash penalty)
+    // FLIPS & LANDING
     // ====================================================================
 
-    resolveLanding(car, totalRotation) {
+    resolveLanding(car, totalRotation, attemptedFlip = false) {
         const TWO_PI = Math.PI * 2;
+
         const remainder = ((totalRotation % TWO_PI) + TWO_PI) % TWO_PI;
-        const distanceFromUpright = Math.min(remainder, TWO_PI - remainder);
+
+        const distanceFromUpright = Math.min(
+            remainder,
+            TWO_PI - remainder
+        );
 
         const tolerance = 0.35;
         const completedAFlip = Math.abs(totalRotation) >= TWO_PI * 0.9;
 
+        // No flip attempted: land normally
+        if (!attemptedFlip) return;
+
+        // Successful flip: award boost
         if (completedAFlip && distanceFromUpright <= tolerance) {
             this.grantFlipBoost(car);
-        } else if (completedAFlip) {
-            // Attempted a flip but didn't land on the wheels
+        }
+
+        // Attempted a flip but failed to land upright
+        else {
             this.crashLanding(car);
         }
     }
 
     grantFlipBoost(car) {
-        const boostDuration = 2000; // 2 seconds
+        const boostDuration = 2000;
         car.flipBoostUntil = this.time.now + boostDuration;
+
         this.showPickupText(car.x, car.y - 30, 'BOOST!', '#00e5ff');
     }
 
     crashLanding(car) {
-        if (car.isStunned || car.isDefeated || car.hasFinished || this.raceFinished) return;
+        if (car.isStunned || car.isDead || car.isDefeated || car.hasFinished || this.raceFinished) return;
 
         car.isStunned = true;
         car.body.setVelocity(0, 0);
         car.body.setAcceleration(0, 0);
         car.setTint(0x888888);
+
         this.showPickupText(car.x, car.y - 30, 'CRASH!', '#ff4444');
 
         this.time.delayedCall(1500, () => {
-            car.isStunned = false;
-            car.clearTint();
+            if (!car.isDead && !car.isDefeated && !car.hasFinished) {
+                car.isStunned = false;
+                car.clearTint();
+            }
         });
     }
 
     // ====================================================================
-    // HUD / UI (health bars, currency, floating text)
+    // HUD / UI
     // ====================================================================
 
     createPlayerHealthBar() {
@@ -559,17 +596,28 @@ killCar(car) {
         this.playerHealthBg.fillRect(x, y, w, h);
 
         this.playerHealthFg.clear();
+
         const color = pct > 0.5 ? 0x2ecc71 : (pct > 0.25 ? 0xf1c40f : 0xe74c3c);
+
         this.playerHealthFg.fillStyle(color);
         this.playerHealthFg.fillRect(x, y, w * pct, h);
     }
 
     createCurrencyHUD() {
         const progress = loadProgress();
-        this.currencyText = this.add.text(20, 64, `CREDITS: $${progress.currency}`, {
-            fontFamily: 'Arial Black', fontSize: 14, color: '#f1c40f',
-            stroke: '#000000', strokeThickness: 3
-        }).setScrollFactor(0);
+
+        this.currencyText = this.add.text(
+            20,
+            64,
+            `CREDITS: $${progress.currency}`,
+            {
+                fontFamily: 'Arial Black',
+                fontSize: 14,
+                color: '#f1c40f',
+                stroke: '#000000',
+                strokeThickness: 3
+            }
+        ).setScrollFactor(0);
     }
 
     updateCurrencyHUD() {
@@ -598,16 +646,21 @@ killCar(car) {
         ai.healthBarBg.fillRect(x, y, barWidth, barHeight);
 
         ai.healthBarFg.clear();
+
         const pct = Math.max(0, ai.health / ai.maxHealth);
         const color = pct > 0.5 ? 0x2ecc71 : (pct > 0.25 ? 0xf1c40f : 0xe74c3c);
+
         ai.healthBarFg.fillStyle(color);
         ai.healthBarFg.fillRect(x, y, barWidth * pct, barHeight);
     }
 
     showDamageNumber(x, y, amount, color = '#ff4444') {
         const txt = this.add.text(x, y, `-${amount}`, {
-            fontFamily: 'Arial Black', fontSize: 18, color,
-            stroke: '#000000', strokeThickness: 3
+            fontFamily: 'Arial Black',
+            fontSize: 18,
+            color,
+            stroke: '#000000',
+            strokeThickness: 3
         }).setOrigin(0.5);
 
         this.tweens.add({
@@ -621,8 +674,11 @@ killCar(car) {
 
     showPickupText(x, y, text, color = '#2ecc71') {
         const txt = this.add.text(x, y, text, {
-            fontFamily: 'Arial Black', fontSize: 18, color,
-            stroke: '#000000', strokeThickness: 3
+            fontFamily: 'Arial Black',
+            fontSize: 18,
+            color,
+            stroke: '#000000',
+            strokeThickness: 3
         }).setOrigin(0.5);
 
         this.tweens.add({
@@ -640,6 +696,7 @@ killCar(car) {
 
     setupPickups(raceLength, count = 5, offsetX = 0) {
         const spacing = raceLength / (count + 1);
+
         for (let i = 1; i <= count; i++) {
             this.spawnPickup(offsetX + spacing * i);
         }
@@ -647,6 +704,7 @@ killCar(car) {
 
     spawnPickup(x) {
         let y;
+
         if (this.groundHeightFn) {
             y = this.groundHeightFn(x) - 20;
         } else if (this.groundLayer) {
@@ -658,8 +716,11 @@ killCar(car) {
         }
 
         const box = this.add.rectangle(x, y, 34, 34, 0xf1c40f).setStrokeStyle(3, 0x8a6d1a);
+
         const mark = this.add.text(x, y, '?', {
-            fontFamily: 'Arial Black', fontSize: 20, color: '#3a2a00'
+            fontFamily: 'Arial Black',
+            fontSize: 20,
+            color: '#3a2a00'
         }).setOrigin(0.5);
 
         const zone = this.add.zone(x, y, 34, 34);
@@ -681,6 +742,7 @@ killCar(car) {
             addCurrency(amount);
             this.updateCurrencyHUD();
             this.showPickupText(this.player.x, this.player.y - 40, `+$${amount}`, '#f1c40f');
+
         } else if (reward === 'ammo') {
             this.weaponAmmo = this.weaponConfigs.map(w => w.maxAmmo);
             this.updateWeaponHUD();
@@ -708,18 +770,18 @@ killCar(car) {
     }
 
     // ====================================================================
-    // AI BEHAVIOR (movement, rubber-banding, flips)
+    // AI BEHAVIOR
     // ====================================================================
 
     getRubberBandMultiplier(ai) {
-        const gap = this.player.x - ai.x; // positive = AI is behind the player, negative = AI is ahead
+        const gap = this.player.x - ai.x;
 
-        const maxBoost = 1.4;    // up to +30% speed when far behind
-        const maxPenalty = 0.55;  // down to -20% speed when far ahead
-        const bandRange = 1200;   // distance (px) at which the full effect kicks in
+        const maxBoost = 1.4;
+        const maxPenalty = 0.55;
+        const bandRange = 1200;
 
         const clamped = Math.max(-bandRange, Math.min(bandRange, gap));
-        const ratio = clamped / bandRange; // -1 (far ahead) to 1 (far behind)
+        const ratio = clamped / bandRange;
 
         if (ratio >= 0) {
             return 1 + ratio * (maxBoost - 1);
@@ -737,7 +799,6 @@ killCar(car) {
         }
 
         if (ai.hasFinished) {
-            // Keep driving forward off-screen rather than stopping dead
             ai.body.setAccelerationX(300);
             this.applyGroundSnapIfAvailable(ai);
             return;
@@ -759,6 +820,7 @@ killCar(car) {
         const hillSurfaceY = this.groundHeightFn
             ? this.groundHeightFn(ai.x)
             : (this.hills ? this.getHillSurfaceY(ai.x) : null);
+
         const aiBottom = ai.y + ai.displayHeight / 2;
 
         let isGrounded = ai.body.touching.down;
@@ -774,14 +836,14 @@ killCar(car) {
                 ai.wasAirborne = true;
                 ai.totalFlipRotation = 0;
 
-                const willFlip = Math.random() < 0.5; // 50% chance it attempts a flip this jump
+                const willFlip = Math.random() < 0.5;
 
                 if (willFlip) {
                     ai.flipLimit = (Math.random() < 0.5 ? 1 : 2) * Math.PI * 2;
                     ai.flipDir = Math.random() < 0.5 ? 1 : -1;
                     ai.flipSpeed = 0.07 + Math.random() * 0.02;
                 } else {
-                    ai.flipLimit = 0; // no flip this time — stays level in the air
+                    ai.flipLimit = 0;
                 }
             }
 
@@ -790,21 +852,24 @@ killCar(car) {
                 ai.rotation += delta;
                 ai.totalFlipRotation += delta;
             }
-            // once the cap is hit, rotation holds steady until it lands — no spamming
+
         } else {
             if (ai.wasAirborne) {
-                this.resolveLanding(ai, ai.totalFlipRotation);
+                this.resolveLanding(
+                    ai,
+                    ai.totalFlipRotation,
+                    ai.flipLimit > 0
+                );
             }
+
             ai.wasAirborne = false;
             ai.rotation = 0;
         }
     }
 
     // ====================================================================
-    // TRACK GEOMETRY (ramps, hills)
+    // TRACK GEOMETRY
     // ====================================================================
-
-
 
     generateRandomHills(trackWidth, count = 6, options = {}) {
         const {
@@ -859,30 +924,31 @@ killCar(car) {
                 return 730 - offset;
             }
         }
+
         return null;
     }
-
-    // --- Tiled / math-based ground helpers (used by tracks with a Tiled
-    // visual map driven by a smooth groundHeightFn instead of a real collider) ---
 
     setupTiledGround(mapKey, tilesetName, imageKey, layerName = 'Ground') {
         this.map = this.make.tilemap({ key: mapKey });
         const tileset = this.map.addTilesetImage(tilesetName, imageKey);
+
         this.groundLayer = this.map.createLayer(layerName, tileset, 0, 0);
         this.groundLayer.setDepth(-10);
-        // No collider here — ground collision is handled by this.groundHeightFn,
-        // set per-track (see Track1.js), which keeps movement smooth.
     }
 
     getGroundTopY(x) {
         if (!this.groundLayer || !this.map) return null;
+
         const tileX = this.map.worldToTileX(x);
+
         for (let tileY = 0; tileY < this.map.height; tileY++) {
             const tile = this.groundLayer.getTileAt(tileX, tileY);
+
             if (tile) {
                 return tileY * this.map.tileHeight;
             }
         }
+
         return this.map.heightInPixels;
     }
 
@@ -890,6 +956,7 @@ killCar(car) {
         const groundTopY = this.groundHeightFn
             ? this.groundHeightFn(sprite.x)
             : this.getGroundTopY(sprite.x);
+
         if (groundTopY !== null && groundTopY !== undefined) {
             sprite.y = groundTopY - sprite.displayHeight / 2;
         }
@@ -899,32 +966,29 @@ killCar(car) {
         if (this.groundHeightFn) {
             const groundY = this.groundHeightFn(sprite.x);
             const bottom = sprite.y + sprite.displayHeight / 2;
-            return groundY !== null && bottom >= groundY - 6 && sprite.body.velocity.y >= -60;
+
+            return groundY !== null &&
+                bottom >= groundY - 6 &&
+                sprite.body.velocity.y >= -60;
         }
+
         return sprite.body.touching.down;
     }
 
     applyGroundSnapIfAvailable(sprite) {
         if (!this.groundHeightFn) return;
+
         const groundY = this.groundHeightFn(sprite.x);
         const bottom = sprite.y + sprite.displayHeight / 2;
+
         if (groundY !== null && bottom >= groundY - 4 && sprite.body.velocity.y >= -60) {
             sprite.y = groundY - sprite.displayHeight / 2;
             sprite.body.setVelocityY(0);
         }
     }
-    applyGroundSnapIfAvailable(sprite) {
-        if (!this.groundHeightFn) return;
-        const groundY = this.groundHeightFn(sprite.x);
-        const bottom = sprite.y + sprite.displayHeight / 2;
-        if (groundY !== null && bottom >= groundY - 4 && sprite.body.velocity.y >= -60) {
-                sprite.y = groundY - sprite.displayHeight / 2;
-                sprite.body.setVelocityY(0);
-        }
-    }
 
     // ====================================================================
-    // RACE FLOW (finish line, results, pause)
+    // RACE FLOW
     // ====================================================================
 
     getRewardForPosition(position) {
@@ -935,7 +999,9 @@ killCar(car) {
     setupFinishLine(x) {
         this.finishX = x;
         this.createRaceHUD();
+
         this.add.rectangle(x, 400, 10, 700, 0xff0000, 0.8);
+
         this.finishLine = this.add.zone(x, 400, 10, 700);
         this.physics.add.existing(this.finishLine, true);
 
@@ -945,9 +1011,11 @@ killCar(car) {
             if (!this.raceFinished) {
                 this.raceFinished = true;
                 this.finishOrder.push({ name: 'Player', isPlayer: true });
+
                 this.player.body.checkCollision.none = true;
                 this.player.isStunned = false;
                 this.player.clearTint();
+
                 this.checkAllFinished();
 
                 this.time.delayedCall(2000, () => {
@@ -963,6 +1031,7 @@ killCar(car) {
                     if (!ai.hasFinished) {
                         ai.hasFinished = true;
                         ai.body.checkCollision.none = true;
+
                         this.finishOrder.push({ name: ai.aiName, isPlayer: false });
                         this.checkAllFinished();
 
@@ -1003,9 +1072,8 @@ killCar(car) {
     }
 
     pauseGame() {
-        if (this.raceFinished) return; // no pausing once you've crossed the line
+        if (this.raceFinished) return;
 
-        // Remember how much of the weapon lockout was left (see the resume fix in update())
         this.weaponsRemaining = Math.max(0, this.weaponsEnabledAt - this.time.now);
         this.justResumed = true;
 
@@ -1014,22 +1082,24 @@ killCar(car) {
             weaponIndex: this.selectedWeaponIndex,
             carIndex: this.selectedCarIndex
         });
+
         this.scene.pause();
     }
 
     createRaceHUD() {
-    const w = this.cameras.main.width;
+        const w = this.cameras.main.width;
 
-    this.posText = this.add.text(w - 20, 20, '', {
-        fontFamily: 'Arial Black', fontSize: 28, color: '#ffffff',
-        stroke: '#000000', strokeThickness: 5
-    }).setOrigin(1, 0).setScrollFactor(0).setDepth(900);
+        this.posText = this.add.text(w - 20, 20, '', {
+            fontFamily: 'Arial Black',
+            fontSize: 28,
+            color: '#ffffff',
+            stroke: '#000000',
+            strokeThickness: 5
+        }).setOrigin(1, 0).setScrollFactor(0).setDepth(900);
 
-    this.progressGfx = this.add.graphics().setScrollFactor(0).setDepth(900);
-}
-    // ====================================================================
-    // Race HUD
-    // ====================================================================
+        this.progressGfx = this.add.graphics().setScrollFactor(0).setDepth(900);
+    }
+
     updateRaceHUD() {
         if (!this.posText || !this.finishX) return;
 
@@ -1037,30 +1107,35 @@ killCar(car) {
         const ais = this.aiRacers || [];
         const total = 1 + ais.length;
 
-        // Place = 1 + number of live AI racers ahead of the player
         const ahead = ais.filter(ai => !ai.isDefeated && ai.x > this.player.x).length;
         const place = ahead + 1;
+
         const suffix = place === 1 ? 'st' : place === 2 ? 'nd' : place === 3 ? 'rd' : 'th';
+
         this.posText.setText(`${place}${suffix} / ${total}`);
         this.posText.setColor(place === 1 ? '#f1c40f' : '#ffffff');
 
-        // Progress bar across the top of the screen
         const barW = 320, barH = 10;
         const barX = (w - barW) / 2, barY = 24;
         const g = this.progressGfx;
+
         g.clear();
         g.fillStyle(0x000000, 0.6);
         g.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
+
         g.fillStyle(0x444444, 1);
         g.fillRect(barX, barY, barW, barH);
 
-        const markerX = (car) => barX + Math.max(0, Math.min(1, car.x / this.finishX)) * barW;
+        const markerX = (car) =>
+            barX + Math.max(0, Math.min(1, car.x / this.finishX)) * barW;
 
         ais.forEach(ai => {
             if (ai.isDefeated) return;
+
             g.fillStyle(0xe74c3c, 1);
             g.fillCircle(markerX(ai), barY + barH / 2, 5);
         });
+
         g.fillStyle(0x2ecc71, 1);
         g.fillCircle(markerX(this.player), barY + barH / 2, 7);
     }
@@ -1074,28 +1149,32 @@ killCar(car) {
         if (!this.raceStarted) {
             this.player.body.setVelocity(0, 0);
             this.player.body.setAcceleration(0, 0);
+
             if (this.aiRacers) {
                 this.aiRacers.forEach(ai => {
                     ai.body.setVelocity(0, 0);
                     ai.body.setAcceleration(0, 0);
                 });
             }
+
             return;
         }
 
-        // After resuming, restore the remaining weapon lockout time
+        // Restore weapon lockout after resuming
         if (this.justResumed) {
             this.weaponsEnabledAt = this.time.now + this.weaponsRemaining;
             this.justResumed = false;
         }
 
-        // Pause on ESC or P (edge-detected so holding the key doesn't retrigger)
+        // Pause controls
         const pauseDown = this.pauseKeys.ESC.isDown || this.pauseKeys.P.isDown;
+
         if (pauseDown && !this.prevPauseDown) {
             this.prevPauseDown = true;
             this.pauseGame();
             return;
         }
+
         this.prevPauseDown = pauseDown;
 
         const player = this.player;
@@ -1110,30 +1189,37 @@ killCar(car) {
         if (this.wasd.R.isDown && !this.prevRDown) {
             this.fireRocket();
         }
+
         this.prevRDown = this.wasd.R.isDown;
 
         if (this.raceFinished) {
-            // Auto-drive forward off-screen, ignore all input/combat
             player.body.setAccelerationX(400);
 
             const hillSurfaceY = this.groundHeightFn
                 ? this.groundHeightFn(player.x)
                 : (this.hills ? this.getHillSurfaceY(player.x) : null);
+
             const playerBottom = player.y + player.displayHeight / 2;
-            if (hillSurfaceY !== null && playerBottom >= hillSurfaceY - 4 && player.body.velocity.y >= -60) {
+
+            if (hillSurfaceY !== null &&
+                playerBottom >= hillSurfaceY - 4 &&
+                player.body.velocity.y >= -60) {
+
                 player.y = hillSurfaceY - player.displayHeight / 2;
                 player.body.setVelocityY(0);
             }
+
             return;
         }
 
-        if (player.isStunned) {
+        if (player.isStunned || player.isDead) {
             this.applyGroundSnapIfAvailable(player);
             return;
         }
 
         const boosted = this.time.now < (player.flipBoostUntil || 0);
         const accel = boosted ? 640 : 440;
+
         player.setMaxVelocity(boosted ? 470 : 370, 700);
 
         if (this.wasd.W.isDown) {
@@ -1151,20 +1237,30 @@ killCar(car) {
         const hillSurfaceY = this.groundHeightFn
             ? this.groundHeightFn(player.x)
             : (this.hills ? this.getHillSurfaceY(player.x) : null);
+
         const playerBottom = player.y + player.displayHeight / 2;
 
         let isGrounded = player.body.touching.down;
 
-        if (hillSurfaceY !== null && playerBottom >= hillSurfaceY - 4 && player.body.velocity.y >= -60) {
+        if (hillSurfaceY !== null &&
+            playerBottom >= hillSurfaceY - 4 &&
+            player.body.velocity.y >= -60) {
+
             player.y = hillSurfaceY - player.displayHeight / 2;
             player.body.setVelocityY(0);
             isGrounded = true;
         }
 
+        // ================================================================
+        // PLAYER FLIP DETECTION
+        // ================================================================
+
         if (!isGrounded) {
+
             if (!player.wasAirborne) {
                 player.wasAirborne = true;
                 player.totalFlipRotation = 0;
+                player.attemptedFlip = false;
             }
 
             const rotationSpeed = 0.12;
@@ -1174,20 +1270,29 @@ killCar(car) {
 
             if (this.wasd.A.isDown) {
                 rotation = -rotationAmount;
+                player.attemptedFlip = true;
+
             } else if (this.wasd.D.isDown) {
                 rotation = rotationAmount;
+                player.attemptedFlip = true;
             }
 
             player.rotation += rotation;
             player.totalFlipRotation += rotation;
 
         } else {
+
             if (player.wasAirborne) {
-                this.resolveLanding(player, player.totalFlipRotation);
+                this.resolveLanding(
+                    player,
+                    player.totalFlipRotation,
+                    player.attemptedFlip
+                );
             }
 
             player.wasAirborne = false;
             player.rotation = 0;
+            player.attemptedFlip = false;
         }
     }
 }
