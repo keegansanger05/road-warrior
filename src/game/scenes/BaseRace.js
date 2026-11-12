@@ -729,6 +729,7 @@ killCar(car) {
     }
 
     updateAIRacer(ai) {
+        const delta = ai.flipDir * ai.flipSpeed * this.frameScale;
         this.drawAIHealthBar(ai);
 
         if (ai.isDefeated) {
@@ -1069,7 +1070,7 @@ killCar(car) {
     // MAIN UPDATE LOOP
     // ====================================================================
 
-    update() {
+    update(time, dt) {
 
         if (!this.raceStarted) {
             this.player.body.setVelocity(0, 0);
@@ -1168,8 +1169,8 @@ killCar(car) {
             }
 
             let delta = 0;
-            if (this.wasd.A.isDown) delta = -0.08;
-            else if (this.wasd.D.isDown) delta = 0.08;
+            if (this.wasd.A.isDown) delta = -0.08 * this.frameScale;
+            else if (this.wasd.D.isDown) delta = 0.08 * this.frameScale;
 
             player.rotation += delta;
             player.totalFlipRotation += delta;
