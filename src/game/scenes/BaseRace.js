@@ -1167,7 +1167,7 @@ killCar(car) {
                 player.totalFlipRotation = 0;
             }
 
-            const rotationSpeed = 0.08;
+            const rotationSpeed = 0.12;
             const rotationAmount = rotationSpeed * (frameDelta / 16.67);
 
             let rotation = 0;
