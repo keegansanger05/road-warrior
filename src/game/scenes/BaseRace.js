@@ -1168,8 +1168,8 @@ killCar(car) {
             }
 
             let delta = 0;
-            if (this.wasd.A.isDown) delta = -0.08;
-            else if (this.wasd.D.isDown) delta = 0.08;
+            if (this.wasd.A.isDown) delta = -0.12;
+            else if (this.wasd.D.isDown) delta = 0.12;
 
             player.rotation += delta;
             player.totalFlipRotation += delta;
