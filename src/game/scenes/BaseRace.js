@@ -1071,7 +1071,8 @@ killCar(car) {
     // ====================================================================
 
     update(time, dt) {
-        this.frameScale = Math.min(dt, 50) / (1000 / 60);
+        const frameMs = (typeof dt === 'number' && dt > 0) ? Math.min(dt, 50) : 1000 / 60;
+        this.frameScale = frameMs / (1000 / 60);
 
         if (!this.raceStarted) {
             this.player.body.setVelocity(0, 0);
