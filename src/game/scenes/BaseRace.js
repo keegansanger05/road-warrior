@@ -1069,7 +1069,7 @@ killCar(car) {
     // MAIN UPDATE LOOP
     // ====================================================================
 
-    update() {
+    update(time, frameDelta) {
 
         if (!this.raceStarted) {
             this.player.body.setVelocity(0, 0);
@@ -1167,16 +1167,25 @@ killCar(car) {
                 player.totalFlipRotation = 0;
             }
 
-            let delta = 0;
-            if (this.wasd.A.isDown) delta = -0.12;
-            else if (this.wasd.D.isDown) delta = 0.12;
+            const rotationSpeed = 0.08;
+            const rotationAmount = rotationSpeed * (frameDelta / 16.67);
 
-            player.rotation += delta;
-            player.totalFlipRotation += delta;
+            let rotation = 0;
+
+            if (this.wasd.A.isDown) {
+                rotation = -rotationAmount;
+            } else if (this.wasd.D.isDown) {
+                rotation = rotationAmount;
+            }
+
+            player.rotation += rotation;
+            player.totalFlipRotation += rotation;
+
         } else {
             if (player.wasAirborne) {
                 this.resolveLanding(player, player.totalFlipRotation);
             }
+
             player.wasAirborne = false;
             player.rotation = 0;
         }
